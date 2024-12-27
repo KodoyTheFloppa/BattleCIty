@@ -9,5 +9,5 @@ bullets = []
 bonuses = []
 labels = []
 
-play_sounds = True
+play_sounds = False
 sounds = {}

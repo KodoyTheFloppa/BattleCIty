@@ -193,13 +193,9 @@ class Tank:
 			self.health -= damage
 			if self.health < 1:
 				if self.side == self.SIDE_ENEMY:
-					tank.trophies["enemy" + str(self.type)] += 1
-					points = (self.type + 1) * 100
-					tank.score += points
 					if globals.play_sounds:
 						globals.sounds["explosion"].play()
 
-					globals.labels.append(Label(self.rect.topleft, str(points), 500))
 
 				self.explode()
 			return True

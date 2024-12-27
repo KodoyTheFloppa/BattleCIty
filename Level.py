@@ -36,10 +36,9 @@ class Level:
 
         self.obstacle_rects = []
 
-        level_nr = 1 if level_nr is None else level_nr % 35
+        level_nr = 1 if level_nr is None else level_nr % 10
         if level_nr == 0:
-            level_nr = 35
-
+            level_nr = 10
         self.loadLevel(level_nr)
 
         self.obstacle_rects = []

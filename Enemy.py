@@ -10,7 +10,7 @@ class Enemy(Tank):
 	(TYPE_BASIC, TYPE_FAST, TYPE_POWER, TYPE_ARMOR) = range(4)
 
 	def __init__(self, level, type, position=None):
-		Tank.__init__(self, level, type, position=None, direction=None, filename=None)
+		Tank.__init__(self, level, type, position=None, direction=None)
 
 		self.bullet_queued = False
 
@@ -149,7 +149,6 @@ class Enemy(Tank):
 
 		new_position = self.path.pop(0)
 
-		# move enemy
 		if self.direction == self.DIR_UP:
 			if new_position[1] < 0:
 				self.path = self.generatePath(self.direction, True)
@@ -169,7 +168,6 @@ class Enemy(Tank):
 
 		new_rect = pygame.Rect(new_position, [26, 26])
 
-		# collisions with tiles
 		if new_rect.collidelist(self.level.obstacle_rects) != -1:
 			self.path = self.generatePath(self.direction, True)
 			return

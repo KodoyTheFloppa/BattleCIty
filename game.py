@@ -224,113 +224,6 @@ class Game:
             for sound in globals.sounds:
                 globals.sounds[sound].stop()
 
-        hiscore = self.loadHiscore()
-
-        if globals.players[0].score > hiscore:
-            hiscore = globals.players[0].score
-            self.saveHiscore(hiscore)
-        if self.nr_of_players == 2 and globals.players[1].score > hiscore:
-            hiscore = globals.players[1].score
-            self.saveHiscore(hiscore)
-
-        img_tanks = [
-            globals.sprites.subsurface(32 * 2, 0, 13 * 2, 15 * 2),
-            globals.sprites.subsurface(48 * 2, 0, 13 * 2, 15 * 2),
-            globals.sprites.subsurface(64 * 2, 0, 13 * 2, 15 * 2),
-            globals.sprites.subsurface(80 * 2, 0, 13 * 2, 15 * 2)
-        ]
-
-        img_arrows = [
-            globals.sprites.subsurface(81 * 2, 48 * 2, 7 * 2, 7 * 2),
-            globals.sprites.subsurface(88 * 2, 48 * 2, 7 * 2, 7 * 2)
-        ]
-
-        globals.screen.fill([0, 0, 0])
-
-        black = pygame.Color("black")
-        white = pygame.Color("white")
-        purple = pygame.Color(127, 64, 64)
-        pink = pygame.Color(191, 160, 128)
-
-        globals.screen.blit(self.font.render("HI-SCORE", False, purple), [105, 35])
-        globals.screen.blit(self.font.render(str(hiscore), False, pink), [295, 35])
-
-        globals.screen.blit(self.font.render("STAGE" + str(self.stage).rjust(3), False, white), [170, 65])
-
-        globals.screen.blit(self.font.render("I-PLAYER", False, purple), [25, 95])
-
-        globals.screen.blit(self.font.render(str(globals.players[0].score).rjust(8), False, pink), [25, 125])
-
-        if self.nr_of_players == 2:
-            globals.screen.blit(self.font.render("II-PLAYER", False, purple), [310, 95])
-
-            globals.screen.blit(self.font.render(str(globals.players[1].score).rjust(8), False, pink), [325, 125])
-
-        for i in range(4):
-            globals.screen.blit(img_tanks[i], [226, 160 + (i * 45)])
-            globals.screen.blit(img_arrows[0], [206, 168 + (i * 45)])
-            if self.nr_of_players == 2:
-                globals.screen.blit(img_arrows[1], [258, 168 + (i * 45)])
-
-        globals.screen.blit(self.font.render("TOTAL", False, white), [70, 335])
-
-        pygame.draw.line(globals.screen, white, [170, 330], [307, 330], 4)
-
-        pygame.display.flip()
-
-        self.clock.tick(2)
-
-        interval = 5
-
-        for i in range(4):
-
-            tanks = globals.players[0].trophies["enemy" + str(i)]
-
-            for n in range(tanks + 1):
-                if n > 0 and globals.play_sounds:
-                    globals.sounds["score"].play()
-
-                globals.screen.blit(self.font.render(str(n - 1).rjust(2), False, black), [170, 168 + (i * 45)])
-                globals.screen.blit(self.font.render(str(n).rjust(2), False, white), [170, 168 + (i * 45)])
-                globals.screen.blit(self.font.render(str((n - 1) * (i + 1) * 100).rjust(4) + " PTS", False, black),
-                                    [25, 168 + (i * 45)])
-                globals.screen.blit(self.font.render(str(n * (i + 1) * 100).rjust(4) + " PTS", False, white),
-                                    [25, 168 + (i * 45)])
-                pygame.display.flip()
-                self.clock.tick(interval)
-
-            if self.nr_of_players == 2:
-                tanks = globals.players[1].trophies["enemy" + str(i)]
-
-                for n in range(tanks + 1):
-
-                    if n > 0 and globals.play_sounds:
-                        globals.sounds["score"].play()
-
-                    globals.screen.blit(self.font.render(str(n - 1).rjust(2), False, black), [277, 168 + (i * 45)])
-                    globals.screen.blit(self.font.render(str(n).rjust(2), False, white), [277, 168 + (i * 45)])
-
-                    globals.screen.blit(self.font.render(str((n - 1) * (i + 1) * 100).rjust(4) + " PTS", False, black),
-                                        [325, 168 + (i * 45)])
-                    globals.screen.blit(self.font.render(str(n * (i + 1) * 100).rjust(4) + " PTS", False, white),
-                                        [325, 168 + (i * 45)])
-
-                    pygame.display.flip()
-                    self.clock.tick(interval)
-
-            self.clock.tick(interval)
-
-        tanks = sum([i for i in globals.players[0].trophies.values()]) - globals.players[0].trophies["bonus"]
-        globals.screen.blit(self.font.render(str(tanks).rjust(2), False, white), [170, 335])
-        if self.nr_of_players == 2:
-            tanks = sum([i for i in globals.players[1].trophies.values()]) - globals.players[1].trophies["bonus"]
-            globals.screen.blit(self.font.render(str(tanks).rjust(2), False, white), [277, 335])
-
-        pygame.display.flip()
-
-        self.clock.tick(1)
-        self.clock.tick(1)
-
         if self.game_over:
             self.gameOverscreen()
         else:
@@ -407,15 +300,11 @@ class Game:
         globals.screen.fill([0, 0, 0])
 
         if pygame.font.get_init():
-            hiscore = self.loadHiscore()
 
-            globals.screen.blit(self.font.render("HI- " + str(hiscore), True, pygame.Color('white')), [170, 35])
 
             globals.screen.blit(self.font.render("1 PLAYER", True, pygame.Color('white')), [165, 250])
             globals.screen.blit(self.font.render("2 PLAYER", True, pygame.Color('white')), [165, 275])
 
-            globals.screen.blit(self.font.render("(c) 1980 1985 NAMCO LTD.", True, pygame.Color('white')), [50, 350])
-            globals.screen.blit(self.font.render("ALL RIGHTS RESERVED", True, pygame.Color('white')), [85, 380])
 
         if self.nr_of_players == 1:
             globals.screen.blit(self.player_image, [125, 245])
@@ -512,29 +401,6 @@ class Game:
             enemy.paused = freeze
         self.timefreeze = freeze
 
-    def loadHiscore(self):
-        filename = ".hiscore"
-        if (not os.path.isfile(filename)):
-            return 20000
-
-        f = open(filename, "r")
-        hiscore = int(f.read())
-
-        if 19999 < hiscore < 1000000:
-            return hiscore
-        else:
-            return 20000
-
-    @staticmethod
-    def saveHiscore(hiscore):
-        try:
-            f = open(".hiscore", "w")
-        except:
-            print("Can't save hi-score")
-            return False
-        f.write(str(hiscore))
-        f.close()
-        return True
 
     def finishLevel(self):
         if globals.play_sounds:

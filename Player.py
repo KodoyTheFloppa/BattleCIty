@@ -15,17 +15,7 @@ class Player(Tank):
 		self.start_position = position
 		self.start_direction = direction
 
-		self.lives = 3
-
-		self.score = 0
-
-		self.trophies = {
-			"bonus": 0,
-			"enemy0": 0,
-			"enemy1": 0,
-			"enemy2": 0,
-			"enemy3": 0
-		}
+		self.lives = 5
 
 		self.image = globals.sprites.subsurface(filename)
 		self.image_up = self.image
