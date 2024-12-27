@@ -14,7 +14,7 @@
 2. Скачайте или клонируйте репозиторий
 3. Установите зависимости:
    ```bash
-   pip install pygame
+   pip install -r requirements.txt  
    ```
 4. Запустите игру:
    ```bash
