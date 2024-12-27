@@ -1,47 +1,39 @@
-from config import *
-from util import *
+from Timer import gtimer
 
+class Explosion():
+	def __init__(self, position, interval = None, images = None):
 
-class Explosion(GameObject):
-    SPRITE_DESCRIPTORS = (
-        (32, 16, 2, 2),
-        (34, 16, 2, 2),
-        (36, 16, 2, 2),
-        (38, 16, 4, 4),
-        (42, 16, 4, 4)
-    )
+		global sprites
 
-    TYPE_SUPER_SHORT = 'super_short'
-    TYPE_SHORT = 'short'
-    TYPE_FULL = 'full'
+		self.position = [position[0]-16, position[1]-16]
+		self.active = True
 
-    _n_states = {
-        TYPE_FULL: len(SPRITE_DESCRIPTORS),
-        TYPE_SHORT: 3,
-        TYPE_SUPER_SHORT: 2
-    }
+		if interval == None:
+			interval = 100
 
-    def __init__(self, x, y, type=TYPE_FULL):
-        super().__init__()
+		if images == None:
+			images = [
+				sprites.subsurface(0, 80*2, 32*2, 32*2),
+				sprites.subsurface(32*2, 80*2, 32*2, 32*2),
+				sprites.subsurface(64*2, 80*2, 32*2, 32*2)
+			]
 
-        self.position = x, y
-        n = self._n_states[type]
-        self.animator = Animator(0.08, n, once=True)
-        self.sprites = [ATLAS().image_at(x, y, sx, sy) for
-                        x, y, sx, sy in self.SPRITE_DESCRIPTORS]
+		images.reverse()
 
-    def render(self, screen):
-        state = self.animator()
+		self.images = [] + images
 
-        if self.animator.done:
-            self.remove_from_parent()
-        else:
-            _, _, w, h = self.SPRITE_DESCRIPTORS[state]
-            half_sprite_size = ATLAS().real_sprite_size // 2
-            w_pix = w * half_sprite_size
-            h_pix = h * half_sprite_size
-            x, y = self.position
-            x -= w_pix
-            y -= h_pix
-            sprite = self.sprites[state]
-            screen.blit(sprite, (x, y))
+		self.image = self.images.pop()
+
+		gtimer.add(interval, lambda :self.update(), len(self.images) + 1)
+
+	def draw(self):
+		global screen
+		""" draw current explosion frame """
+		screen.blit(self.image, self.position)
+
+	def update(self):
+		""" Advace to the next image """
+		if len(self.images) > 0:
+			self.image = self.images.pop()
+		else:
+			self.active = False

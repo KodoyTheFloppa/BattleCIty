@@ -1,295 +1,279 @@
-from config import *
-from util import *
-from math import ceil, floor
+from dataclasses import FrozenInstanceError
+
+import pygame, random
+
+from Timer import gtimer
+from Explosion import Explosion
+from Bullet import Bullet
+from Label import Label
 
 
-class Tank(GameObject):
-    SPEED_NORMAL = 0.08
-    SPEED_FAST = 0.16
+class Tank():
 
-    class Color(Enum):
-        # the value is (x, y) location on the sprite sheet in 8px blocks
-        YELLOW = (0, 0)
-        GREEN = (0, 16)
-        PURPLE = (16, 16)
-        PLAIN = (16, 0)
+	# possible directions
+	(DIR_UP, DIR_RIGHT, DIR_DOWN, DIR_LEFT) = range(4)
 
-    class Type(Enum):
-        LEVEL_1 = 0
-        LEVEL_2 = 2
-        LEVEL_3 = 4
-        LEVEL_4 = 6
-        ENEMY_SIMPLE = 8
-        ENEMY_FAST = 10
-        ENEMY_MIDDLE = 12
-        ENEMY_HEAVY = 14
+	# states
+	(STATE_SPAWNING, STATE_DEAD, STATE_ALIVE, STATE_EXPLODING) = range(4)
 
-        @property
-        def next_level(self):
-            if self == self.LEVEL_1:
-                return self.LEVEL_2
-            elif self == self.LEVEL_2:
-                return self.LEVEL_3
-            elif self == self.LEVEL_3:
-                return self.LEVEL_4
-            else:
-                return self.LEVEL_4
+	# sides
+	(SIDE_PLAYER, SIDE_ENEMY) = range(2)
 
-        @property
-        def max_level(self):
-            return self.LEVEL_4
+	def __init__(self, level, side, position = None, direction = None, filename = None):
 
-        @property
-        def can_crash_concrete(self):
-            return self == self.max_level
+		global sprites
 
-    POSSIBLE_MOVE_STATES = 0, 2
+		# health. 0 health means dead
+		self.health = 100
 
-    SHIELD_TIME = 10
+		# tank can't move but can rotate and shoot
+		self.paralised = False
 
-    FRIEND = 'friend'
-    ENEMY = 'enemy'
+		# tank can't do anything
+		self.paused = False
 
-    @staticmethod
-    def get_sprite_location(color: Color, type: Type, direction: Direction, state):
-        # see: atlas.png to understand this code:
-        x = color.value[0] + direction.value + state
-        y = color.value[1] + type.value
-        return x, y, 2, 2
+		# tank is protected from bullets
+		self.shielded = False
 
-    @property
-    def tank_type(self):
-        return self._tank_type
+		# px per move
+		self.speed = 2
 
-    @tank_type.setter
-    def tank_type(self, t: Type):
-        self._tank_type = t
-        if t == t.ENEMY_FAST:
-            self.speed = self.SPEED_FAST
-        else:
-            self.speed = self.SPEED_NORMAL
-        self._update_sprites()
+		# how many bullets can tank fire simultaneously
+		self.max_active_bullets = 1
 
-    def fire(self):
-        self.want_to_fire = True
+		# friend or foe
+		self.side = side
 
-    def _update_sprites(self):
-        atlas = ATLAS()
-        sprite_locations = {(d, s): self.get_sprite_location(self.color, self.tank_type, d, s)
-                            for d in Direction
-                            for s in self.POSSIBLE_MOVE_STATES}
+		# flashing state. 0-off, 1-on
+		self.flash = 0
 
-        self.sprites = {key: atlas.image_at(*location, auto_crop=True, square=False)
-                        for key, location in sprite_locations.items()}
+		# 0 - no superpowers
+		# 1 - faster bullets
+		# 2 - can fire 2 bullets
+		# 3 - can destroy steel
+		self.superpowers = 0
 
-    @property
-    def color(self):
-        return self._color
+		# each tank can pick up 1 bonus
+		self.bonus = None
 
-    @color.setter
-    def color(self, color):
-        self._color = color
-        self._update_sprites()
+		# navigation keys: fire, up, right, down, left
+		self.controls = [pygame.K_SPACE, pygame.K_UP, pygame.K_RIGHT, pygame.K_DOWN, pygame.K_LEFT]
 
-    def __init__(self, fraction, color=Color.YELLOW, tank_type=Type.LEVEL_1, fire_delay=0.5):
-        super().__init__()
+		# currently pressed buttons (navigation only)
+		self.pressed = [False] * 4
 
-        self.fraction = fraction
-        self.speed = self.SPEED_NORMAL
-        self._direction = Direction.UP
-        self._tank_type = tank_type
-        self._color = color
-        self.is_spawning = False
+		self.shield_images = [
+			sprites.subsurface(0, 48*2, 16*2, 16*2),
+			sprites.subsurface(16*2, 48*2, 16*2, 16*2)
+		]
+		self.shield_image = self.shield_images[0]
+		self.shield_index = 0
 
-        self._update_sprites()
-        
-        self.hit = False
-        self.to_destroy = False
+		self.spawn_images = [
+			sprites.subsurface(32*2, 48*2, 16*2, 16*2),
+			sprites.subsurface(48*2, 48*2, 16*2, 16*2)
+		]
+		self.spawn_image = self.spawn_images[0]
+		self.spawn_index = 0
 
-        self.is_bonus = False
-        self._bonus_animator = Animator(delay=0.5, max_states=2)
+		self.level = level
 
-        self.moving = False
-        self.move_animator = Animator(delay=0.1, max_states=2)
+		if position != None:
+			self.rect = pygame.Rect(position, (26, 26))
+		else:
+			self.rect = pygame.Rect(0, 0, 26, 26)
 
-        self.remember_position()
+		if direction == None:
+			self.direction = random.choice([self.DIR_RIGHT, self.DIR_DOWN, self.DIR_LEFT])
+		else:
+			self.direction = direction
 
-        self.want_to_fire = False
+		self.state = self.STATE_SPAWNING
 
-        atlas = ATLAS()
+		# spawning animation
+		self.timer_uuid_spawn = gtimer.add(100, lambda :self.toggleSpawnImage())
 
-        sz = atlas.real_sprite_size * 2 - 2
-        self.size = sz, sz
+		# duration of spawning
+		self.timer_uuid_spawn_end = gtimer.add(1000, lambda :self.endSpawning())
 
-        if DEBUG:
-            for k, v in self.sprites.items():
-                w, h = v.get_width(), v.get_height()
-                print(k, w, h)
+	def endSpawning(self):
+		""" End spawning
+		Player becomes operational
+		"""
+		self.state = self.STATE_ALIVE
+		gtimer.destroy(self.timer_uuid_spawn_end)
 
-        self._shielded = False
-        self._shield_timer = Timer(self.SHIELD_TIME)
-        self._shield_animator = Animator(delay=0.04, max_states=2)
-        self._shield_sprites = (
-            atlas.image_at(32, 18, 2, 2),
-            atlas.image_at(34, 18, 2, 2)
-        )
 
-        self._spawn_sprites = [
-            atlas.image_at(xi, 12, 2, 2) for xi in range(32, 40, 2)
-        ]
-        self._spawn_animator = Animator(delay=0.1, max_states=len(self._spawn_sprites))
+	def toggleSpawnImage(self):
+		""" advance to the next spawn image """
+		if self.state != self.STATE_SPAWNING:
+			gtimer.destroy(self.timer_uuid_spawn)
+			return
+		self.spawn_index += 1
+		if self.spawn_index >= len(self.spawn_images):
+			self.spawn_index = 0
+		self.spawn_image = self.spawn_images[self.spawn_index]
 
-        self.fire_timer = Timer(fire_delay, paused=True)
+	def toggleShieldImage(self):
+		""" advance to the next shield image """
+		if self.state != self.STATE_ALIVE:
+			gtimer.destroy(self.timer_uuid_shield)
+			return
+		if self.shielded:
+			self.shield_index += 1
+			if self.shield_index >= len(self.shield_images):
+				self.shield_index = 0
+			self.shield_image = self.shield_images[self.shield_index]
 
-    @property
-    def shielded(self):
-        return self._shielded
 
-    @shielded.setter
-    def shielded(self, v):
-        self._shielded = v
-        if self._shielded:
-            self._shield_timer = Timer(self.SHIELD_TIME)
-            self._shield_timer.start()
-        else:
-            self._shield_timer.stop()
+	def draw(self):
+		""" draw tank """
+		global screen
+		if self.state == self.STATE_ALIVE:
+			screen.blit(self.image, self.rect.topleft)
+			if self.shielded:
+				screen.blit(self.shield_image, [self.rect.left-3, self.rect.top-3])
+		elif self.state == self.STATE_EXPLODING:
+			self.explosion.draw()
+		elif self.state == self.STATE_SPAWNING:
+			screen.blit(self.spawn_image, self.rect.topleft)
 
-    @property
-    def direction(self):
-        return self._direction
+	def explode(self):
+		""" start tanks's explosion """
+		if self.state != self.STATE_DEAD:
+			self.state = self.STATE_EXPLODING
+			self.explosion = Explosion(self.rect.topleft)
 
-    @direction.setter
-    def direction(self, new_dir: Direction):
-        self._direction = new_dir
+			if self.bonus:
+				self.spawnBonus()
 
-        discrete_step = ATLAS().real_sprite_size // 2
-        x, y = self.position
-        vx, vy = self._direction.vector
-        if vx != 0:
-            f = floor if vx < 0 else ceil
-            x = f(x / discrete_step) * discrete_step
-        if vy != 0:
-            f = floor if vy < 0 else ceil
-            y = f(y / discrete_step) * discrete_step
-        self.finish_position = x, y
+	def fire(self, forced = False):
+		""" Shoot a bullet
+		@param boolean forced. If false, check whether tank has exceeded his bullet quota. Default: True
+		@return boolean True if bullet was fired, false otherwise
+		"""
 
-    def try_fire(self):
-        if self.fire_timer():
-            self.fire_timer.start()
-            return True
-        return False
+		global bullets, labels
 
-    @property
-    def sprite_key(self):
-        return self.direction, self.POSSIBLE_MOVE_STATES[self.move_animator.state]
+		if self.state != self.STATE_ALIVE:
+			gtimer.destroy(self.timer_uuid_fire)
+			return False
 
-    def render(self, screen):
-        sprite = self.sprites[self.sprite_key]
+		if self.paused:
+			return False
 
-        x, y = self.position
+		if not forced:
+			active_bullets = 0
+			for bullet in bullets:
+				if bullet.owner_class == self and bullet.state == bullet.STATE_ACTIVE:
+					active_bullets += 1
+			if active_bullets >= self.max_active_bullets:
+				return False
 
-        # tank sprite is trimmed (it is smaller than 2x2 sprite)
-        ctx = sprite.get_width() // 2
-        cty = sprite.get_height() // 2
+		bullet = Bullet(self.level, self.rect.topleft, self.direction)
 
-        if not self.is_spawning:
-            screen.blit(sprite, (x - ctx, y - cty))
+		# if superpower level is at least 1
+		if self.superpowers > 0:
+			bullet.speed = 8
 
-        # animate sprite when moving
-        if self.moving:
-            self.move_animator()
+		# if superpower level is at least 3
+		if self.superpowers > 2:
+			bullet.power = 2
 
-        if self.is_bonus:
-            state = self._bonus_animator()
-            self.color = Tank.Color.PURPLE if state == 0 else Tank.Color.PLAIN
+		if self.side == self.SIDE_PLAYER:
+			bullet.owner = self.SIDE_PLAYER
+		else:
+			bullet.owner = self.SIDE_ENEMY
+			self.bullet_queued = False
 
-        # it is size of a half of full 2x2 sprite, effects have full size unlike tanks
-        half_full_size = ATLAS().real_sprite_size
+		bullet.owner_class = self
+		bullets.append(bullet)
+		return True
 
-        if not self._shield_timer.tick():
-            shield_sprite = self._shield_sprites[self._shield_animator()]
-            screen.blit(shield_sprite, (x - half_full_size, y - half_full_size))
-        else:
-            self._shielded = False
+	def rotate(self, direction, fix_position = True):
+		""" Rotate tank
+		rotate, update image and correct position
+		"""
+		self.direction = direction
 
-        if self.is_spawning:
-            spawn_sprite = self._spawn_sprites[self._spawn_animator()]
-            screen.blit(spawn_sprite, (x - half_full_size, y - half_full_size))
+		if direction == self.DIR_UP:
+			self.image = self.image_up
+		elif direction == self.DIR_RIGHT:
+			self.image = self.image_right
+		elif direction == self.DIR_DOWN:
+			self.image = self.image_down
+		elif direction == self.DIR_LEFT:
+			self.image = self.image_left
 
-    def activate_shield(self):
-        self.shielded = self.SHIELD_TIME
+		if fix_position:
+			new_x = self.nearest(self.rect.left, 8) + 3
+			new_y = self.nearest(self.rect.top, 8) + 3
 
-    @property
-    def gun_point(self):
-        """
-        Calculate the coordinates of the gun of the tank
-        :return: (x, y) coordinates of gun tip point
-        """
-        return self.position
-        # x, y = self.position
-        # _, _, w, h = self.bounding_rect
-        # half_w, half_h = round(w / 2), round(h / 2)
-        #
-        # d = self.direction
-        # if d == Direction.UP:
-        #     return x, y - half_h - 1
-        # elif d == Direction.DOWN:
-        #     return x, y + half_h + 1
-        # elif d == Direction.LEFT:
-        #     return x - half_w - 1, y
-        # elif d == Direction.RIGHT:
-        #     return x + half_w + 1, y
+			if (abs(self.rect.left - new_x) < 5):
+				self.rect.left = new_x
 
-    @property
-    def center_point(self):
-        return self.position
+			if (abs(self.rect.top - new_y) < 5):
+				self.rect.top = new_y
 
-    @property
-    def bounding_rect(self):
-        w, h = self.size
-        x, y = self.position
-        return x - round(w / 2), y - round(h / 2), w, h
+	def turnAround(self):
+		""" Turn tank into opposite direction """
+		if self.direction in (self.DIR_UP, self.DIR_RIGHT):
+			self.rotate(self.direction + 2, False)
+		else:
+			self.rotate(self.direction - 2, False)
 
-    def check_hit(self, x, y):
-        return point_in_rect(x, y, self.bounding_rect)
+	def update(self, time_passed):
+		""" Update timer and explosion (if any) """
+		if self.state == self.STATE_EXPLODING:
+			if not self.explosion.active:
+				self.state = self.STATE_DEAD
+				del self.explosion
 
-    def place(self, position):
-        self.position = tuple(position)
-        self.remember_position()
+	def nearest(self, num, base):
+		""" Round number to nearest divisible """
+		return int(round(num / (base * 1.0)) * base)
 
-    def move_tank(self, direction: Direction):
-        self.remember_position()
-        self.moving = True
-        self.direction = direction
-        vx, vy = direction.vector
-        self.move(vx * self.speed, vy * self.speed)
 
-    def remember_position(self):
-        self.old_position = tuple(self.position)
+	def bulletImpact(self, friendly_fire = False, damage = 100, tank = None):
+		""" Bullet impact
+		Return True if bullet should be destroyed on impact. Only enemy friendly-fire
+		doesn't trigger bullet explosion
+		"""
 
-    def undo_move(self):
-        self.position = tuple(self.old_position)
+		global play_sounds, sounds
 
-    def stop(self):
-        self.moving = False
+		if self.shielded:
+			return True
 
-    def align(self):
-        discrete_step = ATLAS().real_sprite_size // 2
-        x, y = self.position
-        vx, vy = self.direction.vector
-        if vx != 0:
-            f = floor if vx < 0 else ceil
-            x = f(x / discrete_step) * discrete_step
-        if vy != 0:
-            f = floor if vy < 0 else ceil
-            y = f(y / discrete_step) * discrete_step
-        self.position = (x, y)
+		if not friendly_fire:
+			self.health -= damage
+			if self.health < 1:
+				if self.side == self.SIDE_ENEMY:
+					tank.trophies["enemy"+str(self.type)] += 1
+					points = (self.type+1) * 100
+					tank.score += points
+					if play_sounds:
+						sounds["explosion"].play()
 
-    def upgrade(self, maximum=False):
-        if self.fraction == self.FRIEND:
-            if maximum:
-                self.tank_type = self.tank_type.max_level
-                self._update_sprites()
-            elif self.tank_type != self.tank_type.next_level:
-                self.tank_type = self.tank_type.next_level
-                self._update_sprites()
+					labels.append(Label(self.rect.topleft, str(points), 500))
+
+				self.explode()
+			return True
+
+		if self.side == self.SIDE_ENEMY:
+			return False
+		elif self.side == self.SIDE_PLAYER:
+			if not self.paralised:
+				self.setParalised(True)
+				self.timer_uuid_paralise = gtimer.add(10000, lambda :self.setParalised(False), 1)
+			return True
+
+	def setParalised(self, paralised = True):
+		""" set tank paralise state
+		@param boolean paralised
+		@return None
+		"""
+		if self.state != self.STATE_ALIVE:
+			gtimer.destroy(self.timer_uuid_paralise)
+			return
+		self.paralised = paralised

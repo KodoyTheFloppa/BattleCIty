@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/.idea/pybattlecity.iml" filepath="$PROJECT_DIR$/.idea/pybattlecity.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/battle-city-tanks-master.iml" filepath="$PROJECT_DIR$/.idea/battle-city-tanks-master.iml" />
     </modules>
   </component>
 </project>
